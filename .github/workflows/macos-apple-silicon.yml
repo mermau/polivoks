@@ -70,7 +70,15 @@ jobs:
             count=$((count + 1))
           done < <(find dist/package -type f -path '*/Contents/MacOS/*' -print0)
           test "$count" -ge 2
-          ditto -c -k --sequesterRsrc --keepParent dist/package dist/Polivoks-Study-macOS-arm64.zip
+          # Ad-hoc sign every bundle. Without a sealed bundle signature, an
+          # unsigned arm64 .app downloaded from GitHub is reported by macOS
+          # as "damaged and can't be opened".
+          while IFS= read -r -d '' bundle; do
+            codesign --force --deep --sign - "$bundle"
+            codesign --verify --deep --strict --verbose=2 "$bundle"
+          done < <(find dist/package -mindepth 2 -maxdepth 2 -type d \
+                     \( -name '*.vst3' -o -name '*.component' -o -name '*.app' \) -print0)
+          ditto -c -k --keepParent dist/package dist/Polivoks-Study-macOS-arm64.zip
           ls -lh dist/Polivoks-Study-macOS-arm64.zip
 
       - name: Upload downloadable VST3 and AU
@@ -80,3 +88,20 @@ jobs:
           path: dist/Polivoks-Study-macOS-arm64.zip
           if-no-files-found: error
           retention-days: 14
+
+      - name: Validate with auval and pluginval
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          PV=pluginval.app/Contents/MacOS/pluginval
+          mkdir -p ~/Library/Audio/Plug-Ins/VST3 ~/Library/Audio/Plug-Ins/Components
+          cp -R "dist/package/VST3/Polivoks Study.vst3" ~/Library/Audio/Plug-Ins/VST3/
+          cp -R "dist/package/Components/Polivoks Study.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          "$PV" --strictness-level 7 --validate-in-process --skip-gui-tests \
+              --validate ~/Library/Audio/Plug-Ins/VST3/"Polivoks Study.vst3"
+          auval -v aumu Pvlk Ipol
+          "$PV" --strictness-level 7 --validate-in-process --skip-gui-tests \
+              --validate ~/Library/Audio/Plug-Ins/Components/"Polivoks Study.component"
