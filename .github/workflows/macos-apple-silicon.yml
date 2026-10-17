@@ -1,0 +1,80 @@
+name: Build macOS Apple Silicon (VST3 + AU)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-arm64:
+    name: macOS 15 / Apple Silicon (arm64)
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Verify Apple Silicon toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Architecture: $(uname -m)"
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          cmake --version
+
+      - name: Configure JUCE, VST3 and Audio Unit
+        shell: bash
+        run: |
+          cmake -S . -B build-ci -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_OSX_ARCHITECTURES=arm64             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0             -DPOLIVOKS_BUILD_PLUGIN=ON             -DPOLIVOKS_BUILD_TESTS=ON
+
+      - name: Compile
+        shell: bash
+        run: cmake --build build-ci --parallel 2
+
+      - name: Run DSP tests
+        shell: bash
+        run: ctest --test-dir build-ci --output-on-failure
+
+      - name: Package plugins and verify native architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/package/VST3 dist/package/Components dist/package/Standalone
+          found_vst3=0
+          found_au=0
+          while IFS= read -r -d '' bundle; do
+            case "$bundle" in
+              *.vst3) destination='VST3'; found_vst3=1 ;;
+              *.component) destination='Components'; found_au=1 ;;
+              *.app) destination='Standalone' ;;
+              *) continue ;;
+            esac
+            echo "Packaging $bundle"
+            ditto "$bundle" "dist/package/$destination/$(basename "$bundle")"
+          done < <(find build-ci/PolivoksEmulation_artefacts -type d               \( -name '*.vst3' -o -name '*.component' -o -name '*.app' \)               -prune -print0)
+          test "$found_vst3" = 1
+          test "$found_au" = 1
+          count=0
+          while IFS= read -r -d '' exe; do
+            echo "Checking $exe"
+            lipo -info "$exe" | grep -q 'arm64'
+            count=$((count + 1))
+          done < <(find dist/package -type f -path '*/Contents/MacOS/*' -print0)
+          test "$count" -ge 2
+          ditto -c -k --sequesterRsrc --keepParent dist/package dist/Polivoks-Study-macOS-arm64.zip
+          ls -lh dist/Polivoks-Study-macOS-arm64.zip
+
+      - name: Upload downloadable VST3 and AU
+        uses: actions/upload-artifact@v4
+        with:
+          name: Polivoks-Study-macOS-arm64
+          path: dist/Polivoks-Study-macOS-arm64.zip
+          if-no-files-found: error
+          retention-days: 14
