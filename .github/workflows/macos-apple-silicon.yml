@@ -28,6 +28,8 @@ jobs:
           test "$(uname -m)" = arm64
           xcodebuild -version
           cmake --version
+          command -v ninja >/dev/null || brew install ninja
+          ninja --version
 
       - name: Configure JUCE, VST3 and Audio Unit
         shell: bash
