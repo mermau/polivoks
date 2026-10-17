@@ -1,0 +1,7 @@
+/build-*/
+/_test_build/
+/.DS_Store
+*.jucer.user
+*.wav
+/build-ci/
+/dist/
