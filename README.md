@@ -10,7 +10,7 @@
 - Noise generator, osc/noise/external-input levels; optional audio input bus is exposed but support depends on the instrument host.
 - Circuit-inspired nonlinear filter with 12 dB/oct nominal lowpass and bandpass outputs, cutoff, resonance, filter envelope and LFO modulation.
 - Independent filter and VCA ADSR envelopes, repeatable AD stages, LFO tremolo, volume and output switching.
-- Scanned-original-inspired photo front panel (user-supplied) with 37 interactive rotary/toggle controls, including right-click **MIDI CC Learn**, persistent CC mappings and plugin state saved with DAW projects.
+- Front panel (v2) drawn entirely in code and inspired by the original layout (Cyrillic legends, animated keybed that follows external MIDI), with 37 interactive rotary/toggle controls, including right-click **MIDI CC Learn**, persistent CC mappings and plugin state saved with DAW projects.
 - CMake configurations for **VST3**, macOS **Audio Unit**, and a **standalone** test instrument. `tests/dsp_tests.cpp` covers silent idle, note/envelope rendering, duophony, LP/BP selection and resonance numerical stability.
 
 ## Build on macOS (VST3 + AU)
@@ -60,7 +60,7 @@ ctest --test-dir build-tests --output-on-failure
 
 The original hardware was not a modern velocity/MIDI synthesizer. MIDI velocity and 48 on-screen keys are practical adaptations. A *real* faithful clone would need measured oscillator/VCF/VCA response curves and circuit solver work; see `docs/CIRCUIT_ANALYSIS.md`.
 
-The supplied reference photograph belongs to its original rightsholder and is included for this user's local reference/project; do not assume it may be redistributed in third-party commercial releases. The same caveat applies to the accompanying scanned circuit drawings.
+The front panel no longer embeds the reference photograph (`assets/panel.jpg` is kept in the repository for reference only and is not compiled in). The supplied reference photograph belongs to its original rightsholder and is included for this user's local reference/project; do not assume it may be redistributed in third-party commercial releases. The same caveat applies to the accompanying scanned circuit drawings.
 
 ## Dependencies / licensing
 
@@ -72,4 +72,4 @@ Engineering background reference: `https://github.com/clarionut/Polivoks_filter`
 
 `.github/workflows/macos-apple-silicon.yml` runs on GitHub's `macos-15` **arm64** runner. It fetches JUCE 8.0.15, builds the VST3 and AU (plus standalone), runs DSP tests, checks bundle binaries with `lipo`, then publishes an unsigned/unnotarized zip as the `Polivoks-Study-macOS-arm64` Actions artifact. Use **Actions → Build macOS Apple Silicon (VST3 + AU) → Run workflow** on `main`, or push to `main`. This CI recipe has not yet been executed on GitHub.
 
-The scanned original schematics PDF is not needed for compilation and is intentionally excluded from the upload-ready source zip. Check redistributable rights for the reference panel photograph before publishing it in a public repository.
+The scanned original schematics PDF is not needed for compilation and is intentionally excluded from the upload-ready source zip. Check redistributable rights for the reference panel photograph (`assets/panel.jpg`) before keeping it in a public repository.

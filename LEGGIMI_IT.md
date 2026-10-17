@@ -1,6 +1,6 @@
 # Polivoks Study 0.1 — guida rapida (macOS)
 
-Il progetto comprende il codice sorgente C++17 per un sintetizzatore sottrattivo con interfaccia fotografica, MIDI Learn e formati compilabili **VST3**, **AU** e **standalone** mediante il framework JUCE 8.0.15.
+Il progetto comprende il codice sorgente C++17 per un sintetizzatore sottrattivo con pannello frontale disegnato nel codice (ispirato all'originale), MIDI Learn e formati compilabili **VST3**, **AU** e **standalone** mediante il framework JUCE 8.0.15.
 
 **Stato reale:** il solo motore sonoro C++ e i suoi test sono stati compilati ed eseguiti in ambiente Linux. Non sono inclusi binari AU/VST3 già pronti; non ho potuto eseguire una compilazione Xcode o verificarne il funzionamento in Ableton/Logic su macOS. Il suono non è ancora confrontato con registrazioni hardware. È un prototipo tecnico, non un'emulazione circuitale rigorosamente convalidata.
 
@@ -50,4 +50,4 @@ Nel repository sono inclusi `.github/workflows/macos-apple-silicon.yml` e i sorg
 
 Le build sono **non firmate e non notarizzate**: Gatekeeper può richiedere ulteriori passaggi prima dell'esecuzione. La pipeline non dimostra ancora la correttezza in Ableton Live, Logic Pro o altri host. Il progetto non ha un formato AAX (Pro Tools).
 
-**Materiali di riferimento:** la scansione PDF degli schemi elettrici non è necessaria per compilare; prima di pubblicarla in un repository pubblico è opportuno verificare il permesso di ridistribuzione. Anche la foto in `assets/panel.jpg` ha diritti da verificare per la diffusione pubblica.
+**Materiali di riferimento:** la scansione PDF degli schemi elettrici non è necessaria per compilare; prima di pubblicarla in un repository pubblico è opportuno verificare il permesso di ridistribuzione. La foto in `assets/panel.jpg` non è più incorporata nel plugin (la grafica è ora disegnata nel codice) ma resta nel repository come riferimento: ha diritti da verificare per la diffusione pubblica.

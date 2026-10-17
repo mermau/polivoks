@@ -35,7 +35,6 @@ if(POLIVOKS_BUILD_PLUGIN)
         list(APPEND POLIVOKS_FORMATS AU)
     endif()
 
-    juce_add_binary_data(PolivoksArtwork SOURCES assets/panel.jpg)
     juce_add_plugin(PolivoksEmulation
         COMPANY_NAME "Independent DSP Study"
         BUNDLE_ID "org.openpolivoks.polivoksemulation"
@@ -62,7 +61,6 @@ if(POLIVOKS_BUILD_PLUGIN)
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0)
     target_link_libraries(PolivoksEmulation PRIVATE
-        PolivoksArtwork
         juce::juce_audio_utils
         juce::juce_dsp
         PUBLIC juce::juce_recommended_config_flags
