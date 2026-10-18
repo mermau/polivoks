@@ -11,15 +11,16 @@ originali (blocchi У1–У9).
 | Blocco originale | Emulazione |
 |---|---|
 | **У1 Tastiera** — 4 ottave Fa–Mi, 1-ГОЛ./2-ГОЛ. | Duofonia: Gen I prende la nota più bassa, Gen II la più alta. In 1 voce entrambi suonano la più bassa. Impulso di avvio a ogni cambio di tensione; la tensione resta tenuta dopo il rilascio (FET KП303). Glissando RC solo sul Gen I. |
-| **У2/У3 Generatori** | Nucleo esponenziale a dente di sega; triangolo ottenuto raddrizzando la sega (ponte a diodi КД521, con la sua piccola asimmetria); impulsi dal comparatore A10 in tre larghezze. Gamme 32'…2': il Fa più basso a 32' è 21.8 Hz, il Mi più alto a 2' è 5274 Hz, come da specifiche. НАСТРОЙКА ±1 tono, РАССТРОЙКА ±2 toni (±25 %). FM esponenziale del Gen I dal Gen II. Deriva lenta (±0.5 % / 4 h nell'originale). |
-| **У7 Modulatore** | Triangolo, quadra, impulsi caotici (comparatore su rumore filtrato 82k/10 nF), gradini casuali (sample & hold FET + 0.22 µF). LED di frequenza. |
-| **У6 Mixer** | Sommatore invertente 22k/22k con condensatore d'uscita; ingresso esterno (ВНЕШ.). |
-| **У4 Filtro** | Filtro a 2 poli con gli amplificatori programmabili K140UD12 usati come integratori: la corrente di polarizzazione fissa la frequenza e limita lo slew-rate, da cui il carattere graffiante. ФНЧ (premuto) / ПФ (rilasciato), autooscillazione verso il massimo della risonanza, taglio a zero = nessun suono (come scritto nel manuale). Pedale sul taglio. |
-| **У5 Amplificatore** | VCA a coppia differenziale K118UD1. Inviluppi a 4 fasi (АТАКА, ЗАТУХАНИЕ, ПЬЕДЕСТАЛ, ПОСЛЕЗВУЧ.) per filtro e amplificatore, con modo ripetuto (∧∧). ВКЛ. tiene l'amplificatore aperto sull'ultima nota. |
+| **У2/У3 Generatori** | Nucleo esponenziale a dente di sega (0…+10 V); triangolo dal raddrizzatore di precisione A9 (0…−5 V, quindi 6 dB più basso della sega); impulsi dal comparatore A10 in tre larghezze (~±2 V). Gamme 32'…2': il Fa più basso a 32' è 21.8 Hz, il Mi più alto a 2' è 5274 Hz, come da specifiche, con il leggero calo delle note acute dovuto al tempo di scarica. НАСТРОЙКА ±1 tono, РАССТРОЙКА ±2 toni (±25 %). FM esponenziale del Gen I dal Gen II. Deriva lenta (±0.5 % / 4 h nell'originale). |
+| **У7 Modulatore** | Trigger di Schmitt A5 (soglie ±1,5 V) che carica C7 da 10 µF: 0,2 … ~40 Hz. Triangolo ±1,5 V; **quadra solo positiva** (0…+1,5 V, sposta verso l'alto); impulsi caotici (comparatore su rumore filtrato 82k/10 nF); gradini casuali (sample & hold FET + 0.22 µF a ogni periodo). Il LED lampeggia con la quadra. |
+| **У6 Mixer** | Sommatore invertente 22k/22k con i potenziometri da 100 kΩ caricati (curva risultante quasi logaritmica); ingresso esterno (ВНЕШ.). |
+| **У4 Filtro** | Due K140UD12 come integratori a transconduttanza: A2 riceve l'errore diviso per 48 (47k/1k) e satura quando la risonanza cresce, A3 riceve l'uscita di A2 divisa per 48. La corrente di polarizzazione viene da A1+V1, quindi **la frequenza di taglio è lineare in Hz**: manopola, inviluppo, modulatore e pedale si sommano, e il modulatore può chiudere del tutto il filtro alle frequenze basse. La risonanza è il partitore R89+R54 sull'uscita passa-banda: al minimo Q≈1, al massimo autooscillazione. ФНЧ (premuto) / ПФ (rilasciato); taglio a zero = nessun suono. |
+| **У5 Amplificatore** | Due VCA a coppia differenziale K118UD1 in serie (modulazione e inviluppo) con ingressi divisi per 100: schiacciano i picchi risonanti forti. Inviluppi: condensatore da 5 µF caricato verso +12,5 V e commutato a +6 V, potenziometri da 1 MΩ logaritmici (attacco ~0,7 ms … 3,3 s; decadimento del filtro da ~22 ms). Modo ripetuto (∧∧) con ПЬЕДЕСТАЛ basso, come nel manuale. ВКЛ. tiene l'amplificatore aperto sull'ultima nota. |
 | **Uscite** | ВЫХОД premuto = uscita di linea (ГРОМКОСТЬ); rilasciato = uscita cuffia (Т.ЛФ., finale KT815/KT814). СЕТЬ accende e spegne. |
 
-Tutto il motore gira a ~176–192 kHz (sovracampionamento 4× a 44.1/48 kHz) per tenere puliti
-alias e saturazioni.
+Il motore gira a ~88–96 kHz (qualità normale) o ~176–192 kHz (alta, dal menu del logo).
+Quando non suona nessuna nota il motore resta fermo e non consuma CPU; mentre suona usa meno
+dell'1 % di un core in qualità normale.
 
 ## Uso con la tastiera MIDI (Arturia KeyLab)
 
@@ -28,7 +29,7 @@ alias e saturazioni.
 - Assegnazioni predefinite: CC 74 taglio, CC 71 risonanza, CC 11 (pedale d'espressione) pedale
   del filtro, CC 7 volume, CC 5 glissando, CC 64 sustain (tiene i tasti).
 - **Clic sul riquadro del logo**: pitch bend (non presente sull'originale, predefinito 2 semitoni),
-  quantità di deriva analogica, ripristino delle assegnazioni MIDI.
+  quantità di deriva analogica, qualità audio, ripristino delle assegnazioni MIDI.
 - La tastiera a schermo copre le 4 ottave originali (Fa–Mi); dalla KeyLab arrivano tutte le note.
 - I selettori (ДИАПАЗОН, ФОРМА, РЕЖИМ) si girano trascinando o con la rotellina.
 

@@ -56,7 +56,12 @@ private:
 
     vks::PolivoksEngine engine;
     vks::EngineParams ep;
-    std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
+    // sovracampionatori preparati in anticipo (1x, 2x, 4x) per cambiare qualità senza allocare
+    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 3> overs;
+    juce::dsp::Oversampling<float>* oversampler = nullptr;
+    double hostRate = 48000.0;
+    int factorFor (bool high) const;
+    void selectFactor (int factor);
     juce::AudioBuffer<float> mono;
     std::vector<float> extHi;
     int osFactor = 4;

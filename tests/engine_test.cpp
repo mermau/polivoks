@@ -23,7 +23,7 @@ static void writeWav (const std::string& path, const std::vector<float>& x, int 
 
 struct Ev { double t; int type; int note; }; // 1 on, 0 off
 
-static std::vector<float> render (EngineParams p, std::vector<Ev> evs, double seconds, int os = 4, int sr = 48000)
+static std::vector<float> render (EngineParams p, std::vector<Ev> evs, double seconds, int os = 2, int sr = 48000)
 {
     PolivoksEngine e; e.prepare ((double) sr * os); e.setParams (p);
     const int block = 64 * os;
@@ -139,17 +139,33 @@ int main (int argc, char** argv)
         std::printf ("      caso peggiore picco = %.3f\n", peak (x));
         check (finite (x) && peak (x) < 1.5, "caso peggiore: stabile e limitato");
     }
-    // 8) CPU
+    // 8) CPU: in esecuzione a 2x e 4x, e a riposo
     {
-        EngineParams p; p.mixG2 = 0.6f; p.mixNoise = 0.2f;
-        PolivoksEngine e; e.prepare (192000.0); e.setParams (p); e.noteOn (60);
-        std::vector<float> buf (256);
-        auto t0 = std::chrono::steady_clock::now();
-        const int blocks = 192000 * 10 / 256;
-        for (int b = 0; b < blocks; ++b) e.process (buf.data(), nullptr, 256);
-        double s = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
-        std::printf ("      10 s di audio a 4x (192 kHz) in %.3f s -> %.1f %% di un core\n", s, s * 10.0);
-        check (s < 2.0, "CPU accettabile");
+        auto bench = [] (double rate, bool play)
+        {
+            EngineParams p; p.mixG2 = 0.6f; p.mixNoise = 0.2f; p.g1Fm = 0.0f;
+            PolivoksEngine e; e.prepare (rate); e.setParams (p);
+            if (play) e.noteOn (60);
+            std::vector<float> buf (256);
+            auto t0 = std::chrono::steady_clock::now();
+            const int blocks = (int) (rate * 10 / 256);
+            for (int b = 0; b < blocks; ++b) e.process (buf.data(), nullptr, 256);
+            return std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count() * 10.0;
+        };
+        const double c2 = bench (96000.0, true), c4 = bench (192000.0, true), ci = bench (96000.0, false);
+        std::printf ("      CPU (%% di un core): suona 2x %.2f, suona 4x %.2f, a riposo %.3f\n", c2, c4, ci);
+        check (c2 < 3.0 && ci < 0.3, "CPU accettabile");
+    }
+    // 9) legge del taglio: rumore attraverso il passa-basso, punto a -3 dB stimato dallo spettro
+    {
+        for (float k : { 0.05f, 0.25f, 0.5f, 0.75f, 1.0f })
+        {
+            EngineParams p; p.mixG1 = 0.0f; p.mixNoise = 1.0f; p.volume = 1.0f; p.fEnv = 0.0f; p.fRes = 0.0f; p.fCut = k;
+            p.aSus = 1.0f; p.analog = 0.0f;
+            auto x = render (p, { { 0.0, 1, 60 } }, 1.0);
+            writeWav (dir + "/cut_" + std::to_string ((int) (k * 100)) + ".wav", x, 48000);
+        }
+        std::printf ("      WAV del taglio scritti (analisi spettrale a parte)\n");
     }
     std::printf ("\n%d errori\n", fails);
     return fails == 0 ? 0 : 1;

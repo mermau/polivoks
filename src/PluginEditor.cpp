@@ -588,15 +588,24 @@ void Panel::showSettingsMenu()
     am.addItem (201, "Ridotta", true, curAn > 0.01f && curAn < 0.9f);
     am.addItem (202, "Normale (come l'originale)", true, curAn >= 0.9f);
 
+    auto* quality = proc.apvts.getParameter (pid::quality);
+    const bool hiQ = proc.apvts.getRawParameterValue (pid::quality)->load() > 0.5f;
+    PopupMenu qm;
+    qm.addItem (400, "Normale (meno CPU)", true, ! hiQ);
+    qm.addItem (401, "Alta (sovracampionamento doppio)", true, hiQ);
+
     PopupMenu m;
     m.addSectionHeader ("Volks82  -  Collateral Effects");
     m.addSubMenu ("Pitch bend", bm);
     m.addSubMenu ("Deriva analogica", am);
+    m.addSubMenu ("Qualita audio", qm);
     m.addSeparator();
     m.addItem (300, "Ripristina le assegnazioni MIDI predefinite");
     m.addItem (301, "Annulla MIDI Learn", proc.learningIndex() >= 0);
-    m.showMenuAsync (PopupMenu::Options(), [this, bend, analog] (int r)
+    m.showMenuAsync (PopupMenu::Options(), [this, bend, analog, quality] (int r)
     {
+        if (r == 400) quality->setValueNotifyingHost (0.0f);
+        else if (r == 401) quality->setValueNotifyingHost (1.0f);
         if (r >= 100 && r <= 112) bend->setValueNotifyingHost (bend->convertTo0to1 ((float) (r - 100)));
         else if (r == 200) analog->setValueNotifyingHost (0.0f);
         else if (r == 201) analog->setValueNotifyingHost (0.4f);

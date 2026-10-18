@@ -51,6 +51,7 @@ inline constexpr const char* pedal   = "pedal";
 inline constexpr const char* power   = "power";
 inline constexpr const char* bendRange = "bend_range";
 inline constexpr const char* analog  = "analog";
+inline constexpr const char* quality = "quality";
 }
 
 namespace vks
@@ -106,11 +107,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     knob   (pid::fSus, "Filtro - Piedistallo", 0.0f);
     knob   (pid::fRel, "Filtro - Rilascio", 0.3f);
     toggle (pid::fLoop,"Filtro - Inviluppo ripetuto", false);
-    knob   (pid::fCut, "Filtro - Frequenza di taglio", 0.55f);
+    knob   (pid::fCut, "Filtro - Frequenza di taglio", 0.35f);
     knob   (pid::fRes, "Filtro - Risonanza", 0.2f);
     toggle (pid::fLp,  "Filtro - Passa-basso (FNCh)", true);
     knob   (pid::fMod, "Filtro - Modulazione", 0.0f);
-    knob   (pid::fEnv, "Filtro - Inviluppo", 0.5f);
+    knob   (pid::fEnv, "Filtro - Inviluppo", 0.6f);
 
     knob   (pid::aAtt, "Amplificatore - Attacco", 0.0f);
     knob   (pid::aDec, "Amplificatore - Decadimento", 0.5f);
@@ -124,6 +125,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     toggle (pid::power, "Rete (SET')", true);
     p.push_back (std::make_unique<AudioParameterInt> (ParameterID { pid::bendRange, v }, "Pitch bend (semitoni)", 0, 12, 2));
     knob   (pid::analog, "Deriva analogica", 1.0f);
+    choice (pid::quality, "Qualita", { "Normale (2x)", "Alta (4x)" }, 0);
 
     return { p.begin(), p.end() };
 }

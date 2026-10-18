@@ -56,27 +56,36 @@ bool VksProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void VksProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // l'emulazione lavora sempre a circa 176–192 kHz: alias e saturazioni restano puliti
-    osFactor = sampleRate <= 50000.0 ? 4 : (sampleRate <= 100000.0 ? 2 : 1);
-    const int stages = osFactor == 4 ? 2 : (osFactor == 2 ? 1 : 0);
-    if (stages > 0)
+    hostRate = sampleRate;
+    for (size_t st = 1; st <= 2; ++st)
     {
-        oversampler = std::make_unique<juce::dsp::Oversampling<float>> (
-            1, (size_t) stages, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false);
-        oversampler->initProcessing ((size_t) samplesPerBlock);
-        setLatencySamples ((int) std::round (oversampler->getLatencyInSamples()));
+        overs[st] = std::make_unique<juce::dsp::Oversampling<float>> (
+            1, st, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false);
+        overs[st]->initProcessing ((size_t) samplesPerBlock);
     }
-    else
-    {
-        oversampler.reset();
-        setLatencySamples (0);
-    }
+    selectFactor (factorFor (rawv (pid::quality) > 0.5f));
+    setLatencySamples (oversampler != nullptr ? (int) std::round (oversampler->getLatencyInSamples()) : 0);
     mono.setSize (1, samplesPerBlock);
-    extHi.assign ((size_t) (samplesPerBlock * osFactor), 0.0f);
-    engine.prepare (sampleRate * osFactor);
+    extHi.assign ((size_t) (samplesPerBlock * 4), 0.0f);
     readParams();
     engine.setParams (ep);
     keyboardState.reset();
+}
+
+// Qualità normale: il motore gira a ~88–96 kHz; alta: ~176–192 kHz
+int VksProcessor::factorFor (bool high) const
+{
+    if (hostRate <= 50000.0)  return high ? 4 : 2;
+    if (hostRate <= 100000.0) return high ? 2 : 1;
+    return 1;
+}
+
+void VksProcessor::selectFactor (int factor)
+{
+    osFactor = factor;
+    oversampler = factor == 4 ? overs[2].get() : (factor == 2 ? overs[1].get() : nullptr);
+    if (oversampler) oversampler->reset();
+    engine.prepare (hostRate * factor);   // nessuna allocazione
 }
 
 void VksProcessor::readParams()
@@ -155,6 +164,9 @@ void VksProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // tasti premuti sull'interfaccia + note in arrivo mostrate sulla tastiera
     keyboardState.processNextMidiBuffer (midi, 0, n, true);
+
+    if (const int want = factorFor (rawv (pid::quality) > 0.5f); want != osFactor)
+        selectFactor (want);
 
     if (mono.getNumSamples() < n) mono.setSize (1, n, false, false, true);
     if ((int) extHi.size() < n * osFactor) extHi.resize ((size_t) (n * osFactor));
