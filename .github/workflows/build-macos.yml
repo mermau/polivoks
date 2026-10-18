@@ -1,0 +1,74 @@
+name: Build macOS
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-8.0.4-${{ runner.os }}
+
+      - name: Configura (binario universale Apple Silicon + Intel)
+        run: |
+          cmake -B build -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Compila VST3, AU e Standalone
+        run: cmake --build build --config Release --target Volks82_VST3 Volks82_AU Volks82_Standalone -j 4
+
+      - name: Test del motore DSP
+        run: |
+          c++ -O2 -std=c++17 tests/engine_test.cpp -o engine_test
+          mkdir -p test-audio && ./engine_test test-audio
+
+      - name: Firma ad-hoc
+        run: |
+          A=build/Volks82_artefacts/Release
+          codesign --force --deep --sign - "$A/VST3/Volks82.vst3"
+          codesign --force --deep --sign - "$A/AU/Volks82.component"
+          codesign --force --deep --sign - "$A/Standalone/Volks82.app"
+
+      - name: Validazione Audio Unit (auval)
+        continue-on-error: true
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R build/Volks82_artefacts/Release/AU/Volks82.component ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aumu Vl82 Clfx
+
+      - name: Pacchetto
+        run: |
+          A=build/Volks82_artefacts/Release
+          mkdir -p dist/Volks82
+          cp -R "$A/VST3/Volks82.vst3" "$A/AU/Volks82.component" "$A/Standalone/Volks82.app" dist/Volks82/
+          cp scripts/installa.command dist/Volks82/"Installa Volks82.command"
+          chmod +x dist/Volks82/"Installa Volks82.command"
+          cp README.md dist/Volks82/LEGGIMI.md
+          (cd dist && ditto -c -k --keepParent Volks82 Volks82-macOS.zip)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Volks82-macOS
+          path: dist/Volks82-macOS.zip
+
+      - name: Release (solo sui tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/Volks82-macOS.zip --title "Volks82 ${GITHUB_REF_NAME}" --notes "Build macOS universale (Apple Silicon + Intel): VST3, AU e Standalone."
