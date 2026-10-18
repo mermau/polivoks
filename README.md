@@ -1,4 +1,4 @@
-# Volks82 — emulazione del Polivoks (VST3 / AU / Standalone)
+# Synthovoks — emulazione del Polivoks (VST3 / AU / Standalone)
 
 Plugin strumento in C++17 con JUCE 8, marchio **Collateral Effects**. Riproduce il sintetizzatore
 duofonico sovietico Polivoks (Formanta, 1982) seguendo il manuale d'uso e gli schemi elettrici
@@ -52,8 +52,8 @@ l'impulso stretto non sono nelle registrazioni e restano ricavati dagli schemi.
 ## Compilazione
 
 La build macOS (universale Apple Silicon + Intel) la fa GitHub Actions a ogni push su `main`:
-l'archivio `Volks82-macOS` compare tra gli artefatti dell'esecuzione. Con un tag `v*`
-(es. `v1.0.0`) viene creata anche una Release pubblica. Dentro c'è `Installa Volks82.command`, che
+l'archivio `Synthovoks-macOS` compare tra gli artefatti dell'esecuzione. Con un tag `v*`
+(es. `v1.0.0`) viene creata anche una Release pubblica. Dentro c'è `Installa Synthovoks.command`, che
 copia i plugin in `/Library/Audio/Plug-Ins/VST3` e `/Library/Audio/Plug-Ins/Components` e l'app in
 `/Applicazioni`.
 
@@ -61,7 +61,7 @@ In locale:
 
 ```
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target Volks82_VST3 Volks82_AU Volks82_Standalone
+cmake --build build --target Synthovoks_VST3 Synthovoks_AU Synthovoks_Standalone
 ```
 
 Test del motore: `c++ -O2 -std=c++17 tests/engine_test.cpp -o engine_test && ./engine_test`

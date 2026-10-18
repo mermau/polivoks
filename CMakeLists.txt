@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Volks82 VERSION 1.0.0 LANGUAGES C CXX)
+project(Synthovoks VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +9,7 @@ if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Versione minima di macOS")
 endif()
 
-option(VOLKS_BUILD_TESTS "Compila i test del motore e l'istantanea dell'interfaccia" OFF)
+option(SYNTHOVOKS_BUILD_TESTS "Compila i test del motore e l'istantanea dell'interfaccia" OFF)
 set(JUCE_DIR "" CACHE PATH "Cartella locale di JUCE (vuoto = scaricato automaticamente)")
 
 if(JUCE_DIR)
@@ -23,14 +23,14 @@ else()
     FetchContent_MakeAvailable(JUCE)
 endif()
 
-juce_add_plugin(Volks82
+juce_add_plugin(Synthovoks
     COMPANY_NAME "Collateral Effects"
     COMPANY_WEBSITE "https://github.com/mermau"
-    BUNDLE_ID "com.collateraleffects.volks82"
+    BUNDLE_ID "com.collateraleffects.synthovoks"
     PLUGIN_MANUFACTURER_CODE Clfx
-    PLUGIN_CODE Vl82
+    PLUGIN_CODE Svks
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "Volks82"
+    PRODUCT_NAME "Synthovoks"
     DESCRIPTION "Emulazione del sintetizzatore Polivoks"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
@@ -42,29 +42,29 @@ juce_add_plugin(Volks82
     AU_MAIN_TYPE kAudioUnitType_MusicDevice
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.png"
     MICROPHONE_PERMISSION_ENABLED TRUE
-    MICROPHONE_PERMISSION_TEXT "Volks82 usa l'ingresso audio come sorgente esterna (ВНЕШ.) del mixer.")
+    MICROPHONE_PERMISSION_TEXT "Synthovoks usa l'ingresso audio come sorgente esterna (ВНЕШ.) del mixer.")
 
-juce_add_binary_data(Volks82_Data SOURCES
+juce_add_binary_data(Synthovoks_Data SOURCES
     resources/fonts/RussoOne.ttf
     resources/fonts/PTSansNarrowBold.ttf
     resources/fonts/PTSansBold.ttf
     resources/fonts/PTSansRegular.ttf)
 
-target_sources(Volks82 PRIVATE
+target_sources(Synthovoks PRIVATE
     src/PluginProcessor.cpp
     src/PluginEditor.cpp)
 
-target_include_directories(Volks82 PRIVATE src)
+target_include_directories(Synthovoks PRIVATE src)
 
-target_compile_definitions(Volks82 PUBLIC
+target_compile_definitions(Synthovoks PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 
-target_link_libraries(Volks82
+target_link_libraries(Synthovoks
     PRIVATE
-        Volks82_Data
+        Synthovoks_Data
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -72,7 +72,7 @@ target_link_libraries(Volks82
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
 
-if(VOLKS_BUILD_TESTS)
+if(SYNTHOVOKS_BUILD_TESTS)
     # test del motore DSP (nessuna dipendenza da JUCE)
     add_executable(engine_test tests/engine_test.cpp)
     target_include_directories(engine_test PRIVATE src)
@@ -82,9 +82,9 @@ if(VOLKS_BUILD_TESTS)
     target_sources(gui_snapshot PRIVATE tests/gui_snapshot.cpp src/PluginProcessor.cpp src/PluginEditor.cpp)
     target_include_directories(gui_snapshot PRIVATE src)
     target_compile_definitions(gui_snapshot PRIVATE
-        JucePlugin_Name="Volks82"
+        JucePlugin_Name="Synthovoks"
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(gui_snapshot PRIVATE
-        Volks82_Data juce::juce_audio_utils juce::juce_dsp
+        Synthovoks_Data juce::juce_audio_utils juce::juce_dsp
         juce::juce_recommended_config_flags)
 endif()

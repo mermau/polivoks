@@ -7,7 +7,7 @@ VksProcessor::VksProcessor()
     : AudioProcessor (BusesProperties()
                         .withInput  ("Ingresso esterno (ВХОД)", juce::AudioChannelSet::stereo(), false)
                         .withOutput ("Uscita", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "VOLKS82", createLayout())
+      apvts (*this, nullptr, "SYNTHOVOKS", createLayout())
 {
     for (auto* p : getParameters())
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))

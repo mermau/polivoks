@@ -30,7 +30,7 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
 
       - name: Compila VST3, AU e Standalone
-        run: cmake --build build --config Release --target Volks82_VST3 Volks82_AU Volks82_Standalone -j 4
+        run: cmake --build build --config Release --target Synthovoks_VST3 Synthovoks_AU Synthovoks_Standalone -j 4
 
       - name: Test del motore DSP
         run: |
@@ -39,37 +39,37 @@ jobs:
 
       - name: Firma ad-hoc
         run: |
-          A=build/Volks82_artefacts/Release
-          codesign --force --deep --sign - "$A/VST3/Volks82.vst3"
-          codesign --force --deep --sign - "$A/AU/Volks82.component"
-          codesign --force --deep --sign - "$A/Standalone/Volks82.app"
+          A=build/Synthovoks_artefacts/Release
+          codesign --force --deep --sign - "$A/VST3/Synthovoks.vst3"
+          codesign --force --deep --sign - "$A/AU/Synthovoks.component"
+          codesign --force --deep --sign - "$A/Standalone/Synthovoks.app"
 
       - name: Validazione Audio Unit (auval)
         continue-on-error: true
         run: |
           mkdir -p ~/Library/Audio/Plug-Ins/Components
-          cp -R build/Volks82_artefacts/Release/AU/Volks82.component ~/Library/Audio/Plug-Ins/Components/
+          cp -R build/Synthovoks_artefacts/Release/AU/Synthovoks.component ~/Library/Audio/Plug-Ins/Components/
           killall -9 AudioComponentRegistrar 2>/dev/null || true
-          auval -v aumu Vl82 Clfx
+          auval -v aumu Svks Clfx
 
       - name: Pacchetto
         run: |
-          A=build/Volks82_artefacts/Release
-          mkdir -p dist/Volks82
-          cp -R "$A/VST3/Volks82.vst3" "$A/AU/Volks82.component" "$A/Standalone/Volks82.app" dist/Volks82/
-          cp scripts/installa.command dist/Volks82/"Installa Volks82.command"
-          chmod +x dist/Volks82/"Installa Volks82.command"
-          cp README.md dist/Volks82/LEGGIMI.md
-          (cd dist && ditto -c -k --keepParent Volks82 Volks82-macOS.zip)
+          A=build/Synthovoks_artefacts/Release
+          mkdir -p dist/Synthovoks
+          cp -R "$A/VST3/Synthovoks.vst3" "$A/AU/Synthovoks.component" "$A/Standalone/Synthovoks.app" dist/Synthovoks/
+          cp scripts/installa.command dist/Synthovoks/"Installa Synthovoks.command"
+          chmod +x dist/Synthovoks/"Installa Synthovoks.command"
+          cp README.md dist/Synthovoks/LEGGIMI.md
+          (cd dist && ditto -c -k --keepParent Synthovoks Synthovoks-macOS.zip)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Volks82-macOS
-          path: dist/Volks82-macOS.zip
+          name: Synthovoks-macOS
+          path: dist/Synthovoks-macOS.zip
 
       - name: Release (solo sui tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/Volks82-macOS.zip --title "Volks82 ${GITHUB_REF_NAME}" --notes "Build macOS universale (Apple Silicon + Intel) - VST3, AU e Standalone."
+          gh release create "${GITHUB_REF_NAME}" dist/Synthovoks-macOS.zip --title "Synthovoks ${GITHUB_REF_NAME}" --notes "Build macOS universale (Apple Silicon + Intel) - VST3, AU e Standalone."

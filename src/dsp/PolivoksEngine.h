@@ -1,4 +1,4 @@
-// Volks82 — emulazione del sintetizzatore Formanta "Polivoks" (1982)
+// Synthovoks — emulazione del sintetizzatore Formanta "Polivoks" (1982)
 // Motore DSP indipendente da JUCE: lavora a frequenza sovracampionata.
 //
 // Unità interne: 1.0 = 0.5 V, il livello nominale indicato sugli schemi all'uscita del mixer

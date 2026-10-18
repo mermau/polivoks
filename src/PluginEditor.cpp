@@ -373,7 +373,7 @@ void Panel::paint (Graphics& g)
         g.setColour (kPanelBlack); g.fillRoundedRectangle (r, 2.2f);
         g.setColour (Colours::black.withAlpha (0.5f)); g.drawRoundedRectangle (r, 2.2f, 0.6f);
     }
-    // logo: targa scura come l'originale, scritta ВОЛКС82 che la riempie, marchio piccolo a destra
+    // logo: targa scura come l'originale, scritta СИНТОВОКС che la riempie, marchio piccolo a destra
     {
         auto plate = logoArea.reduced (3.0f, 3.0f);
         g.setGradientFill (ColourGradient (Colour (0xff3a3a3d), plate.getX(), plate.getY(),
@@ -386,7 +386,7 @@ void Panel::paint (Graphics& g)
         auto brand = inner.removeFromRight (52.0f);
         inner.removeFromRight (7.0f);
 
-        auto word = fitText (Fonts::get().logo(), String::fromUTF8 ("ВОЛКС82"), inner, 0.02f);
+        auto word = fitText (Fonts::get().logo(), String::fromUTF8 ("СИНТОВОКС"), inner, 0.02f);
         g.setColour (Colour (0xff0c0c0c));
         g.strokePath (word, PathStrokeType (1.6f, PathStrokeType::curved));   // contorno scuro della stampa
         g.setColour (Colour (0xfff1f0ec));
@@ -595,7 +595,7 @@ void Panel::showSettingsMenu()
     qm.addItem (401, "Alta (sovracampionamento doppio)", true, hiQ);
 
     PopupMenu m;
-    m.addSectionHeader ("Volks82  -  Collateral Effects");
+    m.addSectionHeader ("Synthovoks  -  Collateral Effects");
     m.addSubMenu ("Pitch bend", bm);
     m.addSubMenu ("Deriva analogica", am);
     m.addSubMenu ("Qualita audio", qm);

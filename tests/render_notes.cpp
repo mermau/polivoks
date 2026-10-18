@@ -42,7 +42,7 @@ int main (int argc, char** argv)
             for (int k = 0; k < taps; ++k) { const double m = k - (taps - 1) / 2.0; const double sinc = m == 0 ? 0.5 : std::sin (kPi * 0.5 * m) / (kPi * m);
                 h[(size_t) k] = (float) (sinc * (0.42 - 0.5 * std::cos (2 * kPi * k / (taps - 1)) + 0.08 * std::cos (4 * kPi * k / (taps - 1)))); }
             for (size_t i = 0; i < out.size(); ++i) { double acc = 0; for (int k = 0; k < taps; ++k) { long idx = (long) (i * os) - k; if (idx >= 0) acc += h[(size_t) k] * hi[(size_t) idx]; } out[i] = (float) acc; }
-            writeWav (dir + "/" + std::to_string (n) + "_" + j.name + "_VOLKS82.wav", out, sr);
+            writeWav (dir + "/" + std::to_string (n) + "_" + j.name + "_SYNTHOVOKS.wav", out, sr);
         }
     return 0;
 }
