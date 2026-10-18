@@ -190,7 +190,8 @@ private:
 };
 
 //==============================================================================
-// Generatore (У2/У3). Ampiezze relative dai livelli dello schema (sega ±5 V = 1.0).
+// Generatore (У2/У3). Le registrazioni dell'originale mostrano la stessa ampiezza picco-picco
+// per sega, quadra e impulso (= 2.0 in unità interne).
 class Generator
 {
 public:
@@ -199,9 +200,9 @@ public:
 
     inline float tick (double freq, int shape)
     {
-        // tempo di scarica del nucleo a sega (~3 µs), compensato all'85 % dal trimmer СМЕЩЕНИЕ:
-        // le note più acute calano di qualche cent come sull'originale
-        const double fEff = freq / (1.0 + freq * 0.45e-6);
+        // tempo di scarica del nucleo a sega, quasi tutto compensato dal trimmer СМЕЩЕНИЕ:
+        // nelle registrazioni dell'originale il Do7 cala di ~2 cent
+        const double fEff = freq / (1.0 + freq * 0.2e-6);
         const double dt = std::clamp (fEff / sr, 1.0e-7, 0.45);
         phase += dt;
         if (phase >= 1.0) phase -= 1.0;
@@ -209,23 +210,25 @@ public:
 
         switch (shape)
         {
-            case 0: // triangolo dal raddrizzatore di precisione A9: 0…−5 V, poi accoppiato in AC (±2,5 V)
+            case 0: // triangolo dal raddrizzatore di precisione A9, accoppiato in AC
             {
                 const float saw = (float) (1.0 - 2.0 * t);
                 float tri = std::fabs (saw);
                 tri += 0.012f * (1.0f - tri) * (saw > 0 ? 1.0f : -1.0f); // soglia non ideale dei diodi
-                return 0.5f * (2.0f * tri - 1.0f);
+                return 2.0f * tri - 1.0f;
             }
-            case 1: // sega discendente "|\" ±5 V
-                return (float) (1.0 - 2.0 * t) + 2.0f * polyBlep (t, dt);
-            default: // comparatore A10 sulla sega: 50 %, ~25 %, ~10 %; uscita ~±2 V
-            {
-                const double w = shape == 2 ? 0.5 : (shape == 3 ? 0.25 : 0.10);
+            case 1: // sega: rampa che sale e ricaduta veloce, con la stessa polarità degli impulsi
+                    // (verificata sulle registrazioni)
+                return (float) (2.0 * t - 1.0) - 2.0f * polyBlep (t, dt);
+            default: // comparatore A10 sulla sega. Misurati sulle registrazioni: quadra 46,6 %, impulso 19,8 %;
+            {        // impulso stretto ~10 % (stima). Il comparatore allunga lo stato alto di ~13 µs, per cui
+                     // in acuto il ciclo utile cresce (Do6: quadra 49,8 %, impulso 22,6 %, come misurato).
+                const double w = std::min (0.9, (shape == 2 ? 0.466 : (shape == 3 ? 0.198 : 0.10)) + 13.0e-6 * fEff);
                 float out = t < w ? 1.0f : -1.0f;
                 out += polyBlep (t, dt);
                 double t2 = t - w; if (t2 < 0.0) t2 += 1.0;
                 out -= polyBlep (t2, dt);
-                return 0.4f * out;
+                return 0.8f * out;   // picco-picco relativo alla sega misurato: ~0,8
             }
         }
     }
@@ -399,7 +402,9 @@ public:
         envF.setSeries (200.0, 4300.0, 200.0);   // R9, R10, R12 del blocco У4
         envA.setSeries (200.0, 200.0, 200.0);    // R21, R22, R23 del blocco У5
         envF.reset(); envA.reset();
-        dcCoef = (float) (1.0 - std::exp (-2.0 * kPi * 20.0 / sr));
+        dcCoef = (float) (1.0 - std::exp (-2.0 * kPi * 12.0 / sr));   // accoppiamento in AC misurato (~12 Hz)
+        shelfCoef = (float) std::tan (kPi * 3100.0 / sr);
+        ovCoef = (float) std::tan (kPi * (1.0 / (2.0 * kPi * 0.23e-3)) / sr);
         vcaDcCoef = (float) (1.0 - std::exp (-2.0 * kPi * 0.8 / sr)); // C1 10 µF / R2 20 k del VCA
         driftCoef = 1.0 - std::exp (-2.0 * kPi * 0.07 / sr);
         smoothCoef = (float) (1.0 - std::exp (-1.0 / (0.002 * sr)));
@@ -442,7 +447,7 @@ public:
         {
             for (int i = 0; i < n; ++i) lfo.tick (prm.lfoMode, rng.bipolar());
             std::fill (out, out + n, 0.0f);
-            filt.reset(); gainSm = 0.0f; vcaDc = 0.0f;
+            filt.reset(); gainSm = 0.0f; vcaDc = 0.0f; shelfS = 0.0f; ovS = 0.0f;
             powerLvl = 1.0f;
             ctrlCount = 0; fresh = true;
             return;
@@ -531,7 +536,18 @@ public:
             if (ext != nullptr) mix += ext[i] * mExt;
             if (std::fabs (mix) > 14.0f) mix = 22.0f * fastTanh (mix / 22.0f);   // rail ±11 V
             dc += (mix - dc) * dcCoef;
-            const float mixOut = mix - dc;
+            float mixOut = mix - dc;
+            // risposta delle uscite dei generatori misurata sulle registrazioni:
+            //  - dopo ogni fronte un piccolo superamento (~12 % del picco-picco, τ ≈ 0,23 ms)
+            //  - sopra ~3 kHz una discesa a mensola fino a circa −11 dB (a = 0,29, fc ≈ 3,1 kHz)
+            {
+                const float v = (mixOut - ovS) * ovCoef / (1.0f + ovCoef);
+                const float lpo = v + ovS; ovS = lpo + v;
+                mixOut += 0.12f * (mixOut - lpo);
+                const float w = (mixOut - shelfS) * shelfCoef / (1.0f + shelfCoef);
+                const float lps = w + shelfS; shelfS = lps + w;
+                mixOut = 0.29f * mixOut + 0.71f * lps;
+            }
 
             // ------------------------------------------- filtro (rumore termico per l'autooscillazione)
             const float fo = filt.tick (mixOut + white * 2.0e-5f, gCur, damp, prm.fLowpass);
@@ -576,6 +592,7 @@ private:
     float dc = 0.0f, dcCoef = 0.0f, vcaDc = 0.0f, vcaDcCoef = 0.0f;
     double drift1 = 0.0, drift2 = 0.0, driftCoef = 0.0;
     double glideLevel1 = 53.0, f1Base = 440.0, f2Base = 440.0;
+    float shelfS = 0.0f, shelfCoef = 0.1f, ovS = 0.0f, ovCoef = 0.01f;
     float gainSm = 0.0f, smoothCoef = 0.01f, powerLvl = 1.0f, powerCoef = 0.001f;
     float gCur = 0.0f, gNext = 0.0f, gStep = 0.0f;
     int ctrlCount = 0;

@@ -22,6 +22,22 @@ Il motore gira a ~88–96 kHz (qualità normale) o ~176–192 kHz (alta, dal men
 Quando non suona nessuna nota il motore resta fermo e non consuma CPU; mentre suona usa meno
 dell'1 % di un core in qualità normale.
 
+## Taratura sulle registrazioni dell'originale
+
+Le forme d'onda sono confrontate con note singole registrate da un Polivoks (sega, quadra e
+impulso, da Do0 a Do7) con `tests/render_notes.cpp`, che rende le stesse note col filtro aperto:
+
+- **Cicli utili:** quadra 46,6 %, impulso 19,8 %; il comparatore allunga lo stato alto di ~13 µs,
+  per cui in acuto crescono (Do6: 49,8 % e 22,6 %), come nelle registrazioni.
+- **Ampiezze:** sega, quadra e impulso hanno quasi lo stesso picco-picco (quadra e impulso ~0,8
+  della sega).
+- **Risposta dei generatori:** dopo ogni fronte un piccolo superamento (~12 %, τ ≈ 0,23 ms) e,
+  sopra ~3 kHz, una discesa a mensola fino a circa −11 dB; accoppiamento in AC a ~12 Hz.
+- **Intonazione:** entro ±4 cent da Do0 a Do7.
+
+Le armoniche rese differiscono da quelle registrate di 0,2–1 dB (sotto i 10 kHz). Il triangolo e
+l'impulso stretto non sono nelle registrazioni e restano ricavati dagli schemi.
+
 ## Uso con la tastiera MIDI (Arturia KeyLab)
 
 - **Clic destro** su qualunque manopola o tasto → *MIDI Learn*, poi muovi un controllo della KeyLab.
