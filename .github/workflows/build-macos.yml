@@ -71,4 +71,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/Volks82-macOS.zip --title "Volks82 ${GITHUB_REF_NAME}" --notes "Build macOS universale (Apple Silicon + Intel): VST3, AU e Standalone."
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/Volks82-macOS.zip --title "Volks82 ${GITHUB_REF_NAME}" --notes "Build macOS universale (Apple Silicon + Intel) - VST3, AU e Standalone."
