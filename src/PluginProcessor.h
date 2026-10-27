@@ -5,11 +5,11 @@
 #include "dsp/PolivoksEngine.h"
 #include "Params.h"
 
-class VksProcessor : public juce::AudioProcessor
+class VksProcessor : public juce::AudioProcessor, private juce::AsyncUpdater
 {
 public:
     VksProcessor();
-    ~VksProcessor() override = default;
+    ~VksProcessor() override { cancelPendingUpdate(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -52,7 +52,8 @@ public:
 
 private:
     void readParams();
-    void handleMidi (const juce::MidiMessage&);
+    bool handleMidi (const juce::MidiMessage&);   // true se un CC ha cambiato un parametro
+    void handleAsyncUpdate() override;            // latenza comunicata all'host dal thread dei messaggi
 
     vks::PolivoksEngine engine;
     vks::EngineParams ep;
@@ -70,8 +71,10 @@ private:
     std::atomic<int> learnIndex { -1 };
     std::atomic<float> ledLevel { 0.0f };
 
-    std::unordered_map<std::string, std::atomic<float>*> raw;
-    float rawv (const char* id) const { return raw.at (id)->load(); }
+    std::atomic<int> pendingLatency { -1 };
+
+    std::array<std::atomic<float>*, vks::kNumParams> prm {};
+    float v (vks::ParamIndex i) const { return prm[(size_t) i]->load (std::memory_order_relaxed); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VksProcessor)
 };

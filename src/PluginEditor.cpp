@@ -343,6 +343,23 @@ void Panel::addSwitch (const SwSpec& s)
 
 void Panel::paint (Graphics& g)
 {
+    // Lo sfondo (pannello, serigrafie, scale) non cambia mai: viene disegnato una volta in
+    // un'immagine alla risoluzione reale dello schermo e poi solo copiato. I ridisegni frequenti
+    // (LED, manopole girate) costano così una copia invece di rifare tutte le scritte.
+    const float px = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (! background.isValid() || std::abs (px - backgroundScale) > 0.001f)
+    {
+        backgroundScale = px;
+        background = Image (Image::ARGB, roundToInt ((float) W * px), roundToInt ((float) H * px), true);
+        Graphics bg (background);
+        bg.addTransform (AffineTransform::scale (px));
+        paintStatic (bg);
+    }
+    g.drawImageTransformed (background, AffineTransform::scale (1.0f / px));
+}
+
+void Panel::paintStatic (Graphics& g)
+{
     // --------------------------------------------------- guance laterali nervate
     for (float cx : { 152.0f, 1002.0f })
     {

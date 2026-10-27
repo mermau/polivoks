@@ -56,6 +56,103 @@ inline constexpr const char* quality = "quality";
 
 namespace vks
 {
+// Indici fissi dei parametri: il thread audio legge i valori da un array, senza cercare stringhe
+enum ParamIndex
+{
+    iLfoRate,
+    iLfoMode,
+    iPhones,
+    iTune,
+    iGlide,
+    iDuo,
+    iVolume,
+    iLineOut,
+    iG1Range,
+    iG1Shape,
+    iG1Mod,
+    iG1Fm,
+    iG2Range,
+    iG2Shape,
+    iG2Mod,
+    iG2Detune,
+    iMixG1,
+    iMixG2,
+    iMixNoise,
+    iMixExt,
+    iFAtt,
+    iFDec,
+    iFSus,
+    iFRel,
+    iFLoop,
+    iFCut,
+    iFRes,
+    iFLp,
+    iFMod,
+    iFEnv,
+    iAAtt,
+    iADec,
+    iASus,
+    iARel,
+    iALoop,
+    iAMod,
+    iAOn,
+    iPedal,
+    iPower,
+    iBendRange,
+    iAnalog,
+    iQuality,
+    kNumParams
+};
+
+inline constexpr const char* kParamIds[kNumParams] =
+{
+    pid::lfoRate,
+    pid::lfoMode,
+    pid::phones,
+    pid::tune,
+    pid::glide,
+    pid::duo,
+    pid::volume,
+    pid::lineOut,
+    pid::g1Range,
+    pid::g1Shape,
+    pid::g1Mod,
+    pid::g1Fm,
+    pid::g2Range,
+    pid::g2Shape,
+    pid::g2Mod,
+    pid::g2Detune,
+    pid::mixG1,
+    pid::mixG2,
+    pid::mixNoise,
+    pid::mixExt,
+    pid::fAtt,
+    pid::fDec,
+    pid::fSus,
+    pid::fRel,
+    pid::fLoop,
+    pid::fCut,
+    pid::fRes,
+    pid::fLp,
+    pid::fMod,
+    pid::fEnv,
+    pid::aAtt,
+    pid::aDec,
+    pid::aSus,
+    pid::aRel,
+    pid::aLoop,
+    pid::aMod,
+    pid::aOn,
+    pid::pedal,
+    pid::power,
+    pid::bendRange,
+    pid::analog,
+    pid::quality
+};
+}
+
+namespace vks
+{
 inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
     using namespace juce;

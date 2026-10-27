@@ -10,7 +10,10 @@ using namespace vks;
 int main (int argc, char** argv)
 {
     if (argc < 5) return 1;
-    const int sr = 44100, os = 2;
+    const int sr = 44100;
+    int os = 2;
+    if (const char* e = std::getenv ("OS")) os = std::atoi (e);
+    const bool raw = std::getenv ("RAW") != nullptr;   // uscita alla frequenza interna (per l'analisi)
     const int note = std::atoi (argv[2]);
     const double dur = std::atof (argv[3]), gate = std::atof (argv[4]);
     EngineParams p; p.analog = 0.0f;
@@ -34,14 +37,20 @@ int main (int argc, char** argv)
         if (! off && pos >= gateAt) { e.noteOff (note); off = true; }
         e.process (hi.data() + pos, nullptr, std::min (block, total - pos));
     }
-    std::vector<float> out ((size_t) (total / os));
-    for (size_t i = 1; i < out.size(); ++i) out[i] = 0.25f * hi[2 * i - 1] + 0.5f * hi[2 * i] + 0.25f * hi[2 * i + 1 < hi.size() ? 2 * i + 1 : 2 * i];
+    std::vector<float> out;
+    if (raw) out = hi;
+    else
+    {
+        out.resize ((size_t) (total / os));
+        for (size_t i = 0; i < out.size(); ++i) { float a = 0; for (int k = 0; k < os; ++k) a += hi[i * (size_t) os + (size_t) k]; out[i] = a / (float) os; }
+    }
+    const int outRate = raw ? sr * os : sr;
     FILE* f = std::fopen (argv[1], "wb");
     auto w32 = [&] (uint32_t v) { std::fwrite (&v, 4, 1, f); };
     auto w16 = [&] (uint16_t v) { std::fwrite (&v, 2, 1, f); };
     const uint32_t bytes = (uint32_t) out.size() * 4;
     std::fwrite ("RIFF", 1, 4, f); w32 (36 + bytes); std::fwrite ("WAVEfmt ", 1, 8, f);
-    w32 (16); w16 (3); w16 (1); w32 ((uint32_t) sr); w32 ((uint32_t) sr * 4); w16 (4); w16 (32);
+    w32 (16); w16 (3); w16 (1); w32 ((uint32_t) outRate); w32 ((uint32_t) outRate * 4); w16 (4); w16 (32);
     std::fwrite ("data", 1, 4, f); w32 (bytes); std::fwrite (out.data(), 4, out.size(), f); std::fclose (f);
     return 0;
 }

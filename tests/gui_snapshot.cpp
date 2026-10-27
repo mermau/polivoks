@@ -45,6 +45,16 @@ int main (int argc, char** argv)
     proc.keyboardState.noteOn (1, 64, 1.0f);
     juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
     auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+    {
+        // costo del disegno: pannello intero e solo la zona del LED (ridisegnata fino a 30 volte al secondo)
+        auto t0 = juce::Time::getMillisecondCounterHiRes();
+        for (int i = 0; i < 20; ++i) ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+        auto t1 = juce::Time::getMillisecondCounterHiRes();
+        const auto ledArea = juce::Rectangle<int> ((int) (110 * scale), (int) (30 * scale), (int) (16 * scale), (int) (16 * scale));
+        for (int i = 0; i < 200; ++i) ed->createComponentSnapshot (ledArea, true, 1.0f);
+        auto t2 = juce::Time::getMillisecondCounterHiRes();
+        std::printf ("disegno: pannello intero %.2f ms, zona LED %.3f ms\n", (t1 - t0) / 20.0, (t2 - t1) / 200.0);
+    }
     juce::File f (juce::File::getCurrentWorkingDirectory().getChildFile (out));
     f.deleteFile();
     juce::FileOutputStream os (f);

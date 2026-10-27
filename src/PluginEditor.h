@@ -102,6 +102,7 @@ public:
     ~Panel() override;
     void paint (juce::Graphics&) override;
     void paintOverChildren (juce::Graphics&) override;
+    void paintStatic (juce::Graphics&);
     void mouseDown (const juce::MouseEvent&) override;
 
     void showControlMenu (juce::Component&, const juce::String& paramId) override;
@@ -132,6 +133,8 @@ private:
     float led = 0.0f;
     bool powerOn = true;
     juce::String learnId;
+    juce::Image background;
+    float backgroundScale = 0.0f;
 };
 
 } // namespace vks::ui

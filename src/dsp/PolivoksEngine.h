@@ -31,6 +31,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 namespace vks
@@ -83,20 +84,47 @@ struct EngineParams
 
 //==============================================================================
 // Matematica veloce
+// uguaglianza esatta, usata solo per sapere se una manopola è cambiata (evita -Wfloat-equal)
+inline bool same (float a, float b) { return ! (a < b) && ! (a > b); }
+inline bool same (double a, double b) { return ! (a < b) && ! (a > b); }
+
 inline float fastTanh (float x)
 {
-    // Padé 7/6, errore < 1e-4 per |x| < 4.97, poi saturazione
+    // Padé 7/6, errore < 1e-4 per |x| < 4.97, poi saturazione. Per i segnali piccoli (il caso
+    // comune) basta lo sviluppo x − x³/3 + 2x⁵/15, con errore < 2e-8.
+    const float x2 = x * x;
+    if (x2 < 0.01f) return x * (1.0f - x2 * (0.33333333f - 0.13333333f * x2));
     if (x > 4.97f) return 1.0f;
     if (x < -4.97f) return -1.0f;
-    const float x2 = x * x;
     return x * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2)))
              / (135135.0f + x2 * (62370.0f + x2 * (3150.0f + 28.0f * x2)));
 }
-// tanh(x)/x, guadagno equivalente per la linearizzazione istantanea
+// tanh(x)/x, guadagno equivalente per la linearizzazione istantanea (senza dividere per x)
 inline float tanhGain (float x)
 {
-    if (std::fabs (x) < 1.0e-4f) return 1.0f;
-    return fastTanh (x) / x;
+    const float x2 = x * x;
+    if (x2 < 0.01f) return 1.0f - x2 * (0.33333333f - 0.13333333f * x2);
+    if (x2 > 24.7f) return 1.0f / std::fabs (x);
+    return (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2)))
+         / (135135.0f + x2 * (62370.0f + x2 * (3150.0f + 28.0f * x2)));
+}
+
+// 2^x veloce (errore relativo < 2e-7, cioè meno di 0,001 cent) per l'FM a ogni campione:
+// parte intera scritta direttamente nell'esponente IEEE 754, parte frazionaria con un polinomio
+inline double fastExp2 (double x)
+{
+    x = std::clamp (x, -1000.0, 1000.0);
+    int i = (int) x;
+    if (x < (double) i) --i;
+    const double f = x - (double) i;
+    const double p = 1.0 + f * (0.6931471805599453 + f * (0.2402265069591007 + f * (0.0555041086648216
+                     + f * (0.0096181291076285 + f * (0.0013333558146428 + f * 0.0001540353039338)))));
+    uint64_t bits;
+    std::memcpy (&bits, &p, sizeof bits);
+    bits += (uint64_t) (int64_t) i << 52;
+    double r;
+    std::memcpy (&r, &bits, sizeof r);
+    return r;
 }
 
 class Rng
@@ -113,6 +141,13 @@ inline float polyBlep (double t, double dt)
 {
     if (t < dt)       { t /= dt;             return (float) (t + t - t * t - 1.0); }
     if (t > 1.0 - dt) { t = (t - 1.0) / dt;  return (float) (t * t + t + t + 1.0); }
+    return 0.0f;
+}
+// polyBLAMP: correzione dei cambi di pendenza (spigoli del triangolo)
+inline float polyBlamp (double t, double dt)
+{
+    if (t < dt)       { t = t / dt - 1.0;         return (float) (-1.0 / 3.0 * t * t * t); }
+    if (t > 1.0 - dt) { t = (t - 1.0) / dt + 1.0; return (float) ( 1.0 / 3.0 * t * t * t); }
     return 0.0f;
 }
 
@@ -133,11 +168,13 @@ class Envelope
 public:
     enum Stage { Idle, Attack, Decay, Sustain, Release };
 
-    void setSampleRate (double fs) { sr = fs; }
+    void setSampleRate (double fs) { sr = fs; lastA = -1.0f; }
     // rSerieX: resistenze in serie ai potenziometri (Ω); C = 5 µF, potenziometri 1 MΩ logaritmici
     void setSeries (double ra, double rd, double rr) { rsA = ra; rsD = rd; rsR = rr; }
     void setTimes (float attKnob, float decKnob, float susKnob, float relKnob)
     {
+        if (same (attKnob, lastA) && same (decKnob, lastD) && same (susKnob, lastS) && same (relKnob, lastR)) return;
+        lastA = attKnob; lastD = decKnob; lastS = susKnob; lastR = relKnob;
         constexpr double C = 5.0e-6, Rpot = 1.0e6;
         aCoef = coef (C * (rsA + Rpot * logPot (attKnob)));
         dCoef = coef (C * (rsD + Rpot * logPot (decKnob)));
@@ -186,6 +223,7 @@ private:
     double sr = 48000.0, y = 0.0, aCoef = 0.01, dCoef = 0.001, rCoef = 0.001;
     double rsA = 200.0, rsD = 200.0, rsR = 200.0;
     float sustain = 0.5f;
+    float lastA = -1.0f, lastD = -1.0f, lastS = -1.0f, lastR = -1.0f;
     Stage stage = Idle;
 };
 
@@ -195,15 +233,19 @@ private:
 class Generator
 {
 public:
-    void setSampleRate (double fs) { sr = fs; }
+    void setSampleRate (double fs) { sr = fs; lastFreq = -1.0; }
     void resetPhase (double p) { phase = p; }
 
     inline float tick (double freq, int shape)
     {
-        // tempo di scarica del nucleo a sega, quasi tutto compensato dal trimmer СМЕЩЕНИЕ:
-        // nelle registrazioni dell'originale il Do7 cala di ~2 cent
-        const double fEff = freq / (1.0 + freq * 0.2e-6);
-        const double dt = std::clamp (fEff / sr, 1.0e-7, 0.45);
+        if (! same (freq, lastFreq))   // cambia solo a frequenza di controllo (o con l'FM)
+        {
+            lastFreq = freq;
+            // tempo di scarica del nucleo a sega, quasi tutto compensato dal trimmer СМЕЩЕНИЕ:
+            // nelle registrazioni dell'originale il Do7 cala di ~2 cent
+            fEff = freq / (1.0 + freq * 0.2e-6);
+            dt = std::clamp (fEff / sr, 1.0e-7, 0.45);
+        }
         phase += dt;
         if (phase >= 1.0) phase -= 1.0;
         const double t = phase;
@@ -215,11 +257,15 @@ public:
                 const float saw = (float) (1.0 - 2.0 * t);
                 float tri = std::fabs (saw);
                 tri += 0.012f * (1.0f - tri) * (saw > 0 ? 1.0f : -1.0f); // soglia non ideale dei diodi
-                return 2.0f * tri - 1.0f;
+                // spigoli in t = 0 (pendenza da +4 a −4) e t = 0,5 (da −4 a +4)
+                double th = t + 0.5; if (th >= 1.0) th -= 1.0;
+                const float corr = (float) (4.0 * dt) * (polyBlamp (th, dt) - polyBlamp (t, dt));
+                // il gradino dei diodi a metà periodo (−0,048) corretto con un polyBLEP
+                return 2.0f * tri - 1.0f + corr - 0.024f * polyBlep (th, dt);
             }
             case 1: // sega: rampa che sale e ricaduta veloce, con la stessa polarità degli impulsi
                     // (verificata sulle registrazioni)
-                return (float) (2.0 * t - 1.0) - 2.0f * polyBlep (t, dt);
+                return (float) (2.0 * t - 1.0) - polyBlep (t, dt);   // polyBLEP normalizzato su un salto di 2
             default: // comparatore A10 sulla sega. Misurati sulle registrazioni: quadra 46,6 %, impulso 19,8 %;
             {        // impulso stretto ~10 % (stima). Il comparatore allunga lo stato alto di ~13 µs, per cui
                      // in acuto il ciclo utile cresce (Do6: quadra 49,8 %, impulso 22,6 %, come misurato).
@@ -234,7 +280,7 @@ public:
     }
 
 private:
-    double sr = 48000.0, phase = 0.0;
+    double sr = 48000.0, phase = 0.0, lastFreq = -1.0, fEff = 0.0, dt = 0.0;
 };
 
 //==============================================================================
@@ -246,12 +292,15 @@ public:
     {
         sr = fs;
         nzCoef = (float) (1.0 - std::exp (-2.0 * kPi * 194.0 / fs)); // R7 82k / C5 10 nF
+        lastRate = -1.0f;
     }
 
     // C7 = 10 µF caricato dall'uscita ±12 V di A5 attraverso 4,7 kΩ + potenziometro da 1 MΩ:
     // il triangolo tra ±1,5 V è un tratto quasi lineare di una carica RC (0,2 … ~40 Hz)
     void setRate (float rateKnob)
     {
+        if (same (rateKnob, lastRate)) return;
+        lastRate = rateKnob;
         const double R = 4.7e3 + 1.0e6 * logPot (1.0f - rateKnob);
         k = (float) (1.0 / (R * 10.0e-6 * sr));
     }
@@ -268,9 +317,9 @@ public:
         {
             case 0: out = tri; break;                                       // triangolo ±1,5 V
             case 1: out = sq ? 1.0f : 0.0f; break;                          // quadra 0…+1,5 V
-            case 2: out = nz * 6.0f > 0.0f ? 1.0f : -1.0f; break;           // impulsi caotici
+            case 2: out = nz > 0.0f ? 1.0f : -1.0f; break;                  // impulsi caotici (comparatore A3)
             default:
-                if (newPeriod) held = std::clamp (nz * 5.5f, -1.0f, 1.0f);  // S&H all'inizio del periodo
+                if (newPeriod) held = std::clamp (nz * 2.2f, -1.0f, 1.0f);  // S&H all'inizio del periodo
                 out = held;
                 break;
         }
@@ -280,8 +329,63 @@ public:
 
 private:
     double sr = 48000.0;
-    float tri = 0.0f, nz = 0.0f, nzCoef = 0.01f, held = 0.0f, out = 0.0f, k = 0.0f;
+    float tri = 0.0f, nz = 0.0f, nzCoef = 0.01f, held = 0.0f, out = 0.0f, k = 0.0f, lastRate = -1.0f;
     bool sq = true;
+};
+
+//==============================================================================
+// Generatore di rumore (blocco У7): giunzione base-emettitore di V1 (KT315Б) in valanga, polarizzata
+// da R1 100 k. C1 10 nF su R2 100 k = passa-alto a 159 Hz; C2 100 pF sullo stesso nodo = passa-basso
+// a 15,9 kHz; A1 (×6,6) e A2 (×100, KR140UD8: banda di guadagno unitario ~1 MHz -> ~10 kHz).
+// Lo spettro è quindi definito in Hz e non dipende più dalla frequenza di campionamento interna.
+class NoiseSource
+{
+public:
+    void prepare (double fs)
+    {
+        hp = (float) std::exp (-2.0 * kPi * 159.0 / fs);
+        lp1 = (float) (1.0 - std::exp (-2.0 * kPi * 15900.0 / fs));
+        lp2 = (float) (1.0 - std::exp (-2.0 * kPi * 10000.0 / fs));
+        // normalizzazione: valore efficace fisso (indipendente dalla frequenza di campionamento)
+        Rng r (0x5EEDu); reset(); double acc = 0.0; const int n = 1 << 16;
+        gain = 1.0f;
+        for (int i = 0; i < n; ++i) { const float v = tick (r.bipolar()); acc += (double) v * v; }
+        gain = (float) (kRms / std::sqrt (acc / n));
+        reset();
+    }
+    void reset() { x1 = y1 = a = b = 0.0f; }
+    inline float tick (float white)
+    {
+        const float h = hp * (y1 + white - x1);   // passa-alto a un polo
+        x1 = white; y1 = h;
+        a += (h - a) * lp1;
+        b += (a - b) * lp2;
+        return b * gain;
+    }
+    static constexpr float kRms = 0.42f;   // ~±1,5 V di picco su A2, in unità interne relative alle onde
+
+private:
+    float hp = 0.99f, lp1 = 0.5f, lp2 = 0.5f, gain = 1.0f, x1 = 0.0f, y1 = 0.0f, a = 0.0f, b = 0.0f;
+};
+
+//==============================================================================
+// Tolleranze di uno strumento reale: ogni registro (ДИАПАЗОН) passa per una rete di resistenze
+// tarata a mano (trimmer "Регистры", vedi la procedura di accordatura), e il convertitore
+// esponenziale di ogni generatore ha un piccolo errore di scala. Valori fissi, come su un singolo
+// esemplare; proporzionali alla "deriva analogica" (a zero lo strumento è ideale).
+struct Tolerances
+{
+    std::array<float, 5> range1 {}, range2 {};   // cent per registro
+    float scale1 = 0.0f, scale2 = 0.0f;          // errore di scala, cent per ottava dal La 440
+    Tolerances()
+    {
+        Rng r (0x0F0E1982u);
+        for (auto& c : range1) c = 2.0f * r.bipolar();
+        for (auto& c : range2) c = 2.0f * r.bipolar();
+        range1[2] = 0.0f;                         // 8' è il registro di riferimento dell'accordatura
+        scale1 = 0.6f * r.bipolar();
+        scale2 = 0.6f * r.bipolar();
+    }
 };
 
 //==============================================================================
@@ -397,6 +501,7 @@ public:
         g1.setSampleRate (sr); g2.setSampleRate (sr);
         g2.resetPhase (0.37);
         lfo.setSampleRate (sr);
+        noise.prepare (sr);
         filt.setSampleRate (sr); filt.reset();
         envF.setSampleRate (sr); envA.setSampleRate (sr);
         envF.setSeries (200.0, 4300.0, 200.0);   // R9, R10, R12 del blocco У4
@@ -409,8 +514,12 @@ public:
         driftCoef = 1.0 - std::exp (-2.0 * kPi * 0.07 / sr);
         smoothCoef = (float) (1.0 - std::exp (-1.0 / (0.002 * sr)));
         powerCoef = (float) (1.0 - std::exp (-1.0 / (0.08 * sr)));
+        // i potenziometri si muovono con continuità: i valori in arrivo (MIDI a 7 bit, automazioni a
+        // blocchi) vengono raccordati con una costante di tempo di 5 ms, a frequenza di controllo
+        potCoef = (float) (1.0 - std::exp (-(double) kControlInterval / (0.005 * sr)));
         glideLevel1 = (double) keys.note1;
-        ctrlCount = 0; fresh = true;
+        lastGlide = -1.0f;
+        ctrlCount = 0; fresh = true; snapPots = true;
         gCur = gNext = PolivoksFilter::gFor (1000.0, sr);
         gStep = 0.0f;
     }
@@ -425,8 +534,7 @@ public:
 
     float lfoLed() const { return prm.power ? lfo.ledLevel() : 0.0f; }
     bool  keyGate() const { return keys.gate; }
-    // nessun suono in corso: il motore può restare fermo (punto 6)
-    bool  isSilent() const { return envA.isIdle() && ! keys.gate && ! prm.aOn && powerLvl < 1.0e-4f; }
+    bool  isSilent() const { return envA.isIdle() && ! keys.gate && ! prm.aOn; }
 
     // Rende n campioni alla frequenza interna. ext può essere nullptr.
     void process (float* out, const float* ext, int n)
@@ -441,99 +549,111 @@ public:
         envA.setTimes (prm.aAtt, prm.aDec, prm.aSus, prm.aRel);
         lfo.setRate (prm.lfoRate);
 
-        // ---------------------------------------------------------- silenzio: costo quasi nullo
+        // ---------------------------------------------------------- spento: niente da calcolare
         const float powerTarget = prm.power ? 1.0f : 0.0f;
-        if (envA.isIdle() && ! gate && powerLvl > 0.5f && powerTarget > 0.5f)
+        if (! prm.power && powerLvl < 1.0e-4f)
         {
-            for (int i = 0; i < n; ++i) lfo.tick (prm.lfoMode, rng.bipolar());
             std::fill (out, out + n, 0.0f);
-            filt.reset(); gainSm = 0.0f; vcaDc = 0.0f; shelfS = 0.0f; ovS = 0.0f;
+            powerLvl = 0.0f;
+            idleReset();
+            return;
+        }
+        // ---------------------------------------------------------- silenzio: solo il modulatore (LED)
+        if (envA.isIdle() && ! gate && powerLvl > 0.999f && prm.power)
+        {
+            for (int i = 0; i < n; ++i) lfo.tick (prm.lfoMode, noise.tick (rng.bipolar()));
+            std::fill (out, out + n, 0.0f);
             powerLvl = 1.0f;
-            ctrlCount = 0; fresh = true;
+            idleReset();
             return;
         }
 
-        // ---------------------------------------------------------- valori costanti nel blocco
-        const double glideTau = 0.0005 + 2.2 * std::pow ((double) prm.glide, 2.2);
-        const double glideCoef = 1.0 - std::exp (-1.0 / (glideTau * sr));
-        const double oct1 = (double) (prm.g1Range - 2);
-        const double oct2 = (double) (prm.g2Range - 2);
-        const double tuneSemis = prm.tune * 2.0 + prm.bendSemis;
-        const double detuneSemis = prm.g2Detune * 3.86;            // ±25 %
-        const double vib1 = loadedPot (prm.g1Mod, 100.0f, 100.0f); // ottave per unità di modulatore
-        const double vib2 = loadedPot (prm.g2Mod, 100.0f, 100.0f);
-        const double fmDepth = loadedPot (prm.g1Fm, 47.0f, 100.0f) * 2.5;
-        const double an = prm.analog;
-
+        // ---------------------------------------------------------- bersagli dei comandi
+        if (! same (prm.glide, lastGlide))
+        {
+            lastGlide = prm.glide;
+            const double glideTau = 0.0005 + 2.2 * std::pow ((double) prm.glide, 2.2);
+            glideCoef = 1.0 - std::exp (-1.0 / (glideTau * sr));
+        }
+        Pots t;
+        t.tuneSemis   = prm.tune * 2.0f + prm.bendSemis;
+        t.detuneSemis = prm.g2Detune * 3.86f;                         // ±25 %
+        t.vib1   = loadedPot (prm.g1Mod, 100.0f, 100.0f);             // ottave per unità di modulatore
+        t.vib2   = loadedPot (prm.g2Mod, 100.0f, 100.0f);
+        t.fm     = loadedPot (prm.g1Fm, 47.0f, 100.0f) * 2.5f;
         // mixer: potenziometri da 100 kΩ caricati dagli ingressi da 22 kΩ del sommatore
-        const float mG1 = loadedPot (prm.mixG1, 22.0f, 100.0f);
-        const float mG2 = loadedPot (prm.mixG2, 22.0f, 100.0f);
-        const float mNz = loadedPot (prm.mixNoise, 22.0f, 100.0f) * 0.6f;
-        const float mExt = loadedPot (prm.mixExt, 22.0f, 100.0f) * 2.0f;
-
+        t.mG1    = loadedPot (prm.mixG1, 22.0f, 100.0f);
+        t.mG2    = loadedPot (prm.mixG2, 22.0f, 100.0f);
+        t.mNz    = loadedPot (prm.mixNoise, 22.0f, 100.0f);
+        t.mExt   = loadedPot (prm.mixExt, 22.0f, 100.0f) * 2.0f;
         // filtro: corrente di polarizzazione = somma lineare dei comandi (A1 + V1).
         // ЧАСТОТА СРЕЗА: 12,5 V attraverso R87 47 k + la parte alta del potenziometro da 100 k
         // verso la massa virtuale, meno la corrente a manopola chiusa (filtro chiuso a zero).
-        const float cutI = (float) ((12.5 / (47.0 + (1.0 - prm.fCut) * 100.0) - 12.5 / 147.0) / 0.180952);
-        const float envI = loadedPot (prm.fEnv, 100.0f, 100.0f) * 0.40f;   // inviluppo 0…6 V, R88 100 k
-        const float modI = loadedPot (prm.fMod, 100.0f, 100.0f) * 0.11f;   // modulatore ±1,5 V, R86 100 k
-        const float pedI = prm.pedal * 0.7f;                                // pedale attraverso 39 k
-        constexpr float fMax = 12000.0f;
-        const float damp = PolivoksFilter::dampingFor (prm.fRes);
+        t.cutI   = (float) ((12.5 / (47.0 + (1.0 - prm.fCut) * 100.0) - 12.5 / 147.0) / 0.180952);
+        t.envI   = loadedPot (prm.fEnv, 100.0f, 100.0f) * 0.40f;      // inviluppo 0…6 V, R88 100 k
+        t.modI   = loadedPot (prm.fMod, 100.0f, 100.0f) * 0.11f;      // modulatore ±1,5 V, R86 100 k
+        t.pedI   = prm.pedal * 0.7f;                                   // pedale attraverso 39 k
+        t.damp   = PolivoksFilter::dampingFor (prm.fRes);
+        t.aMod   = loadedPot (prm.aMod, 100.0f, 100.0f) * 0.8f;
+        t.vol    = std::pow (prm.volume, 2.5f) * 0.45f;
+        t.ph     = std::pow (prm.phones, 2.5f) * 0.55f;
+        if (snapPots) { pot = t; potPrev = t; snapPots = false; }
 
-        const float aModDepth = loadedPot (prm.aMod, 100.0f, 100.0f) * 0.8f;
-        const float vol = std::pow (prm.volume, 2.5f) * 0.45f;
-        const float ph  = std::pow (prm.phones, 2.5f) * 0.55f;
-        const bool  fmOn = fmDepth > 1.0e-4;
+        constexpr float fMax = 12000.0f;
+        const float an = prm.analog;
+        const float oct1 = (float) (prm.g1Range - 2), oct2 = (float) (prm.g2Range - 2);
+        const float tol1 = an * (tol.range1[(size_t) prm.g1Range] / 100.0f);
+        const float tol2 = an * (tol.range2[(size_t) prm.g2Range] / 100.0f);
+        const float invCI = 1.0f / (float) kControlInterval;
 
         for (int i = 0; i < n; ++i)
         {
             const float white = rng.bipolar();
-            const float m = lfo.tick (prm.lfoMode, white);
+            const float nz = noise.tick (white);
+            const float m = lfo.tick (prm.lfoMode, nz);
             const float ef = envF.tick (prm.fLoop, gate);
             const float ea = envA.tick (prm.aLoop, gate);
+            glideLevel1 += ((double) keys.note1 - glideLevel1) * glideCoef;
 
             // ------------------------------------------- aggiornamenti a frequenza di controllo
             if (--ctrlCount <= 0)
             {
                 ctrlCount = kControlInterval;
+                potPrev = pot;
+                potsMoving = pot.approach (t, potCoef);
+                if (! potsMoving) potPrev = pot;
                 drift1 += (rng.bipolar() * 0.9 - drift1) * driftCoef * kControlInterval;
                 drift2 += (rng.bipolar() * 0.9 - drift2) * driftCoef * kControlInterval;
 
-                const float iSum = cutI + envI * ef + modI * m + pedI + (float) (an * drift1 * 0.004);
+                const float iSum = pot.cutI + pot.envI * ef + pot.modI * m + pot.pedI + (float) (an * drift1 * 0.004);
                 const float hz = std::max (0.0f, iSum) * fMax;
                 gCur = gNext;
                 gNext = PolivoksFilter::gFor (hz, sr);
                 if (fresh) { gCur = gNext; fresh = false; }
-                gStep = (gNext - gCur) / (float) kControlInterval;
+                gStep = (gNext - gCur) * invCI;
 
-                if (! fmOn)
-                {
-                    const double s1 = glideLevel1 + tuneSemis + oct1 * 12.0 - 69.0 + an * drift1 * 0.06;
-                    f1Base = 440.0 * std::exp2 (s1 / 12.0);
-                }
-                const double s2 = (double) keys.note2 + tuneSemis + detuneSemis + oct2 * 12.0 - 69.0
+                // intonazione in semitoni dal La 440, poi errori di scala dei convertitori
+                const double s1 = glideLevel1 + pot.tuneSemis + oct1 * 12.0 - 69.0 + an * drift1 * 0.06;
+                const double s2 = (double) keys.note2 + pot.tuneSemis + pot.detuneSemis + oct2 * 12.0 - 69.0
                                   + an * (drift2 * 0.06 + 0.035);
-                f2Base = 440.0 * std::exp2 (s2 / 12.0);
+                const double o1 = s1 / 12.0, o2 = s2 / 12.0;
+                f1Base = 440.0 * fastExp2 (o1 * (1.0 + an * tol.scale1 / 1200.0) + tol1 / 12.0 + pot.vib1 * m);
+                f2Base = 440.0 * fastExp2 (o2 * (1.0 + an * tol.scale2 / 1200.0) + tol2 / 12.0 + pot.vib2 * m);
             }
             gCur += gStep;
-
-            glideLevel1 += ((double) keys.note1 - glideLevel1) * glideCoef;
+            // posizione nell'intervallo di controllo: i livelli sono interpolati senza scalini
+            const float fr = potsMoving ? (float) (kControlInterval - ctrlCount) * invCI : 1.0f;
+            auto lerp = [fr] (float a, float b) { return a + (b - a) * fr; };
 
             // ------------------------------------------- generatori
-            const float o2 = g2.tick (f2Base * (vib2 > 1.0e-9 ? std::exp2 (vib2 * m) : 1.0), prm.g2Shape);
-            double f1;
-            if (fmOn)
-            {
-                const double s1 = glideLevel1 + tuneSemis + oct1 * 12.0 - 69.0 + an * drift1 * 0.06;
-                f1 = 440.0 * std::exp2 (s1 / 12.0 + vib1 * m + fmDepth * o2);
-            }
-            else f1 = f1Base * (vib1 > 1.0e-9 ? std::exp2 (vib1 * m) : 1.0);
+            const float o2 = g2.tick (f2Base, prm.g2Shape);
+            const double f1 = pot.fm > 1.0e-4f ? f1Base * fastExp2 ((double) pot.fm * o2) : f1Base;
             const float o1 = g1.tick (f1, prm.g1Shape);
 
             // ------------------------------------------- mixer
-            float mix = o1 * mG1 + o2 * mG2 + white * mNz;
-            if (ext != nullptr) mix += ext[i] * mExt;
+            float mix = o1 * lerp (potPrev.mG1, pot.mG1) + o2 * lerp (potPrev.mG2, pot.mG2)
+                      + nz * lerp (potPrev.mNz, pot.mNz);
+            if (ext != nullptr) mix += ext[i] * lerp (potPrev.mExt, pot.mExt);
             if (std::fabs (mix) > 14.0f) mix = 22.0f * fastTanh (mix / 22.0f);   // rail ±11 V
             dc += (mix - dc) * dcCoef;
             float mixOut = mix - dc;
@@ -550,13 +670,13 @@ public:
             }
 
             // ------------------------------------------- filtro (rumore termico per l'autooscillazione)
-            const float fo = filt.tick (mixOut + white * 2.0e-5f, gCur, damp, prm.fLowpass);
+            const float fo = filt.tick (mixOut + white * 2.0e-5f, gCur, lerp (potPrev.damp, pot.damp), prm.fLowpass);
 
             // ------------------------------------------- VCA: accoppiamento C1, poi due coppie differenziali
             vcaDc += (fo - vcaDc) * vcaDcCoef;
             const float vin = fo - vcaDc;
             // modulazione d'ampiezza (con la quadra, solo positiva, il volume sale soltanto)
-            const float modGain = std::max (0.0f, 1.0f + aModDepth * m);
+            const float modGain = std::max (0.0f, 1.0f + lerp (potPrev.aMod, pot.aMod) * m);
             const float st1 = 10.5f * fastTanh (vin / 10.5f) * modGain;
             const float st2 = 4.0f * fastTanh (st1 / 4.0f);
             gainSm += (ea - gainSm) * smoothCoef;
@@ -564,10 +684,10 @@ public:
 
             // ------------------------------------------- uscite
             float y;
-            if (prm.lineOut) y = vca * vol;
+            if (prm.lineOut) y = vca * lerp (potPrev.vol, pot.vol);
             else
             {
-                float h = vca * ph;
+                float h = vca * lerp (potPrev.ph, pot.ph);
                 const float xo = 0.004f; // piccola zona morta del push-pull KT815/KT814 senza polarizzazione
                 h = h > xo ? h - xo * 0.5f : (h < -xo ? h + xo * 0.5f : h * 0.5f);
                 y = fastTanh (h * 1.2f) / 1.2f;
@@ -580,23 +700,56 @@ public:
     }
 
 private:
+    // valori dei potenziometri già convertiti in grandezze elettriche, raccordati nel tempo
+    struct Pots
+    {
+        float tuneSemis = 0, detuneSemis = 0, vib1 = 0, vib2 = 0, fm = 0;
+        float mG1 = 0, mG2 = 0, mNz = 0, mExt = 0;
+        float cutI = 0, envI = 0, modI = 0, pedI = 0, damp = 1, aMod = 0, vol = 0, ph = 0;
+        // ritorna true se qualche valore si sta ancora muovendo
+        bool approach (const Pots& t, float k)
+        {
+            bool moving = false;
+            auto a = [k, &moving] (float& v, float target)
+            {
+                const float d = target - v;
+                if (std::fabs (d) > 1.0e-6f) { v += d * k; moving = true; }
+                else v = target;
+            };
+            a (tuneSemis, t.tuneSemis); a (detuneSemis, t.detuneSemis); a (vib1, t.vib1); a (vib2, t.vib2);
+            a (fm, t.fm); a (mG1, t.mG1); a (mG2, t.mG2); a (mNz, t.mNz); a (mExt, t.mExt);
+            a (cutI, t.cutI); a (envI, t.envI); a (modI, t.modI); a (pedI, t.pedI); a (damp, t.damp);
+            a (aMod, t.aMod); a (vol, t.vol); a (ph, t.ph);
+            return moving;
+        }
+    };
+
+    void idleReset()
+    {
+        filt.reset(); gainSm = 0.0f; vcaDc = 0.0f; shelfS = 0.0f; ovS = 0.0f;
+        ctrlCount = 0; fresh = true; snapPots = true;
+    }
+
     EngineParams prm;
     double sr = 96000.0;
     Generator g1, g2;
     Modulator lfo;
+    NoiseSource noise;
+    Tolerances tol;
     PolivoksFilter filt;
     Envelope envF, envA;
     KeyAssigner keys;
     Rng rng { 0xBADC0DEu };
+    Pots pot, potPrev;
     bool sustainPedal = false, lastGate = false;
-    float dc = 0.0f, dcCoef = 0.0f, vcaDc = 0.0f, vcaDcCoef = 0.0f;
-    double drift1 = 0.0, drift2 = 0.0, driftCoef = 0.0;
+    float dc = 0.0f, dcCoef = 0.0f, vcaDc = 0.0f, vcaDcCoef = 0.0f, potCoef = 0.1f, lastGlide = -1.0f;
+    double drift1 = 0.0, drift2 = 0.0, driftCoef = 0.0, glideCoef = 1.0;
     double glideLevel1 = 53.0, f1Base = 440.0, f2Base = 440.0;
     float shelfS = 0.0f, shelfCoef = 0.1f, ovS = 0.0f, ovCoef = 0.01f;
     float gainSm = 0.0f, smoothCoef = 0.01f, powerLvl = 1.0f, powerCoef = 0.001f;
     float gCur = 0.0f, gNext = 0.0f, gStep = 0.0f;
     int ctrlCount = 0;
-    bool fresh = true;
+    bool fresh = true, snapPots = true, potsMoving = false;
 };
 
 } // namespace vks
